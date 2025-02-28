@@ -1,19 +1,25 @@
-import * as admin from 'firebase-admin';
+import admin from 'firebase-admin';
 
-const ServiceAccount: admin.ServiceAccount = {
-  projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
-  privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY,
-  clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL
-};
-
-// Check if Firebase Admin has been initialized to avoid "already exists" error
 if (!admin.apps.length) {
-  // Initialize Firebase Admin SDK
-  admin.initializeApp({
-    serviceAccountId: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-    projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
-    credential: admin.credential.cert(ServiceAccount)
-  });
-};
+  try {
+    if (!process.env.FIREBASE_ADMIN_PROJECT_ID || 
+        !process.env.FIREBASE_ADMIN_PRIVATE_KEY || 
+        !process.env.FIREBASE_ADMIN_CLIENT_EMAIL) {
+      throw new Error('Missing Firebase admin credentials in environment variables');
+    }
+    
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
+        privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+      }),
+    });
+    console.log('Firebase Admin initialized successfully');
+  } catch (error) {
+    console.error('Firebase admin initialization error:', error);
+    throw error;
+  }
+}
 
 export default admin;

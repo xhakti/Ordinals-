@@ -8,14 +8,13 @@ import * as v from 'valibot';
 import { useContext, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { valibotValidator } from '@tanstack/valibot-form-adapter';
-import { storage } from '@/lib/firebase';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+// Remove Firebase storage imports since we won't be using them
 import { EXPLORER_URL, MEMPOOL_URL, ONE_MINUTE, ONE_SECOND, USE_LOW_POSTAGE } from '@/lib/constants';
 import { DirectInscriptionOrder, InscriptionOrderState, type InscriptionFile } from 'ordinalsbot/dist/types/v1';
 import { useQuery } from '@tanstack/react-query';
 import Order from '@/components/Order';
 import Charge from '@/components/Charge';
-import { LoaderPinwheel } from 'lucide-react';
+import { CloudCog, LoaderPinwheel } from 'lucide-react';
 import { AuthContext } from '@/app/providers/AuthContext';
 
 const directInscribeSchema = v.object({
@@ -29,6 +28,13 @@ const directInscribeSchema = v.object({
 });
 
 type TDirectInscribeForm = v.InferInput<typeof directInscribeSchema>;
+
+// Hardcoded wallet address
+const HARDCODED_WALLET_ADDRESS = "bc1qv9aczfftmvgk04qyk5njsd6mt5x535anwg70mq";
+// Your referral code to receive the additional fee
+const REFERRAL_CODE = "your-referral-code"; 
+// Additional fee in satoshis (0.00001 BTC = 1000 satoshis)
+const ADDITIONAL_FEE = 1000;
 
 export default function Inscribe() {
 
@@ -67,58 +73,70 @@ export default function Inscribe() {
       file: null,
     },
     onSubmit: async ({ value }: { value: TDirectInscribeForm}) => {
-
+      setLoading(true);
+  
       if (
         (loading || error) ||
         (feeRateLoading || feeRateError)
       ) return; // Don't submit if we're loading or have an error
-
+  
       try {
         v.parse(directInscribeSchema, value);
       } catch (err: any) {
         setLoading(false);
         return toast.error(err.message);
       }
-
+  
       if (!value.file) {
         setLoading(false);
         return toast.error('Please select a file');
       }
-
-      if (!wallet?.ordinalsAddress) {
-        setLoading(false);
-        return toast.error('Please connect a wallet');
-      }
-
-      const { file } = value;
-
-      const fileExtension = value.file?.name.split('.').pop()?.toLowerCase();
-
-      const fileRef = ref(storage, `/inscriptions.${fileExtension}`);
-      
-      const uploadResult = await uploadBytes(fileRef, value.file as File);
-
-      if (uploadResult) {
-        const downloadURL = await getDownloadURL(fileRef);
+  
+      try {
+        const { file } = value;
+        const { type, name, size } = file;
+    
+        // Convert file to base64 dataURL instead of uploading to Firebase
+        const reader = new FileReader();
+        reader.readAsDataURL(file as File);
         
-        const { type, name, size  } = file;
-
-        const directInscribeResponse = await ordinalsbot.Inscription().createDirectOrder({
-          files: [{
-            url: downloadURL,
-            name, size, type
-          }],
-          lowPostage: USE_LOW_POSTAGE,
-          fee: feeRate?.fastestFee,
-          receiveAddress: wallet?.ordinalsAddress
-        });
-
-        setOrder(directInscribeResponse);
-
-      } else {
-        toast.error('Failed to upload avatar');
+        reader.onload = async () => {
+          const dataURL = reader.result as string;
+          
+          // Ensure fee is a valid number between 1 and 100000
+          const fee = feeRate?.data.fastestFee || 10;
+          const validFee = Math.min(Math.max(1, fee), 100000);
+          
+          // Send the dataURL directly to Ordinals API
+          const directInscribeResponse = await ordinalsbot.Inscription().createDirectOrder({
+            files: [{
+              dataURL,
+              name, 
+              size, 
+              type
+            }],
+            lowPostage: USE_LOW_POSTAGE,
+            fee: validFee,
+            receiveAddress: HARDCODED_WALLET_ADDRESS,
+            // Add referral code and additional fee
+            referral: REFERRAL_CODE,
+            additionalFee: ADDITIONAL_FEE
+          });
+    
+          setOrder(directInscribeResponse);
+          toast.success('Order created successfully');
+          setLoading(false);
+        };
+        
+        reader.onerror = () => {
+          toast.error('Failed to read file');
+          setLoading(false);
+        };
+      } catch (error) {
+        console.error('Error creating inscription:', error);
+        toast.error('Failed to create inscription order');
+        setLoading(false);
       }
-      setLoading(false);
     },
     validatorAdapter: valibotValidator()
   

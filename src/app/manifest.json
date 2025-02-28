@@ -1,0 +1,8 @@
+{
+    "name": "NextJS Bitcoin Application",
+    "short_name": "BTC App",
+    "icons": [],
+    "theme_color": "#ffffff",
+    "background_color": "#ffffff",
+    "display": "standalone"
+}

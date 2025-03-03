@@ -1,10 +1,7 @@
 'use client';
 import { AuthContext } from '@/app/providers/AuthContext';
 import { WALLET_SIGN_IN_MESSAGE } from '@/lib/constants';
-import { auth } from '@/lib/firebase';
 import { UNISAT, XVERSE, MAGIC_EDEN, LEATHER, useLaserEyes } from '@omnisat/lasereyes';
-import { signInWithCustomToken } from 'firebase/auth';
-import { signIn } from 'next-auth/react';
 import { useContext, useEffect } from 'react';
 import Image, { type StaticImageData } from 'next/image';
 import {
@@ -45,65 +42,19 @@ export default function ConnectWallet () {
     disconnect,
     provider
   } = useLaserEyes();
-
-  const signIntoFirebase = async (address: string, signature: string) => {
-    try {
-      const response = await fetch('/api/auth/customToken', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ address, signature }) // Send the address and its signature
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch custom token');
-      }
-
-      const data = await response.json();
-      const customToken = data.customToken;
-
-      // Use the custom token to authenticate with Firebase
-      try {
-        await signInWithCustomToken(auth, customToken);
-
-        const idToken = await auth.currentUser?.getIdToken(true);
-        if (idToken) {
-          // Sign in with next-auth, which establishes a session
-          await signIn('credentials', { redirect: false, idToken });
-          return true;
-        }
-      } catch (error) {
-        console.error('Error signing in with custom token:', error);
-        // cancel();
-        return false;
-      }
-    } catch (error) {
-      console.error('Fetch Error: ', error);
-      // cancel();
-      return false;
-    }
-  };
   
   useEffect(() => {
-    if (connected && !auth.currentUser) {
-      const connect = async (wallet: SUPPORTED_WALLETS) => {
-        const signedMessage = await signMessage(WALLET_SIGN_IN_MESSAGE);
-        const signInResult = await signIntoFirebase(paymentAddress, signedMessage);
-
-        if (signInResult) return loginWithWallet({ 
-          ordinalsAddress: address, 
-          ordinalsPublicKey: publicKey, 
-          paymentAddress, 
-          paymentPublicKey,
-          wallet
-        });
-      };
-  
-      connect(provider);
+    if (connected) {
+      // Directly login with wallet data when connected
+      loginWithWallet({ 
+        ordinalsAddress: address, 
+        ordinalsPublicKey: publicKey, 
+        paymentAddress, 
+        paymentPublicKey,
+        wallet: provider as SUPPORTED_WALLETS
+      });
     }
-
-  }, [connected]);
+  }, [connected, address, publicKey, paymentAddress, paymentPublicKey, provider, loginWithWallet]);
 
   const signOut = async () => {
     disconnect();

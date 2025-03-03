@@ -11,7 +11,7 @@ import { ThemeProvider } from 'next-themes';
 import AuthContextProvider from './AuthContext';
 
 import { ONE_MINUTE } from '@/lib/constants';
-import { LaserEyesProvider, MAINNET } from '@omnisat/lasereyes';
+import { LaserEyesProvider, SIGNET } from '@omnisat/lasereyes';
 
 interface ProvidersProps {
   children: NonNullable<ReactNode>;
@@ -34,7 +34,7 @@ const Providers: FC<ProvidersProps> = ({ children, session }) => {
       defaultTheme='system'
       enableSystem
     >
-      <LaserEyesProvider config={{ network: MAINNET }}>
+      <LaserEyesProvider config={{ network: SIGNET }}>
         <SessionProvider 
           session={session}
           refetchInterval={5  * ONE_MINUTE.seconds}

@@ -30,14 +30,13 @@ const directInscribeSchema = v.object({
 type TDirectInscribeForm = v.InferInput<typeof directInscribeSchema>;
 
 export default function Inscribe() {
-  const { wallet, network, loginWithWallet } = useContext(AuthContext);
+  const { wallet, connectUnisat, connectXverse, loginWithWallet } = useContext(AuthContext);
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<DirectInscriptionOrder | null>(null);
 
   // Enhanced logging for wallet debugging
   useEffect(() => {
     console.log("Wallet context on component mount:", wallet);
-    console.log("Network on component mount:", network);
     
     // Check if wallet has the expected structure
     if (wallet) {
@@ -81,20 +80,33 @@ export default function Inscribe() {
         console.error("Error parsing stored wallet:", e);
       }
     }
-  }, [wallet, network, loginWithWallet]);
+  }, [wallet, loginWithWallet]);
 
-  // Add a debug button to manually set wallet (for testing)
-  const debugSetWallet = () => {
-    const testWallet = {
-      ordinalsAddress: "tb1pfakagp5n2x7tj4llcnhp9xtdrn97f6yhexqxngs2m8e3gqqgg3ns8k4kcz",
-      ordinalsPublicKey: "test_pubkey",
-      paymentAddress: "tb1qq3se78es2nz2f69nxm5muw6c6ph8ep776pp03z",
-      paymentPublicKey: "test_pubkey",
-      wallet: "UNISAT" as any,
-      network: "Signet"
-    };
-    console.log("Setting test wallet:", testWallet);
-    loginWithWallet(testWallet);
+  // Connect to wallet handlers
+  const handleConnectUnisat = async () => {
+    try {
+      setLoading(true);
+      await connectUnisat();
+      toast.success('Connected to Unisat wallet');
+    } catch (error) {
+      console.error('Failed to connect to Unisat:', error);
+      toast.error('Failed to connect to Unisat wallet');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConnectXverse = async () => {
+    try {
+      setLoading(true);
+      await connectXverse();
+      toast.success('Connected to Xverse wallet');
+    } catch (error) {
+      console.error('Failed to connect to Xverse:', error);
+      toast.error('Failed to connect to Xverse wallet');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const { data, error, isLoading } = useQuery({
@@ -151,7 +163,7 @@ export default function Inscribe() {
       // Enhanced wallet debugging
       console.log("Current wallet state at submission:", wallet);
       console.log("Wallet type:", wallet?.wallet);
-      console.log("Wallet network:", network);
+      // console.log("Wallet network:", wallet?.network);
       
       if (!wallet) {
         console.log("Wallet is null or undefined");
@@ -226,54 +238,63 @@ export default function Inscribe() {
       <div className='flex flex-col justify-between w-2/3 h-48 gap-5'>
         <h2 className='text-2xl'>Inscribe a File</h2>
         
-        {/* Add debug button in development mode */}
-        {process.env.NODE_ENV === 'development' && !wallet && (
-          <Button onClick={debugSetWallet} className="mb-4">
-            Debug: Set Test Wallet
-          </Button>
+        {/* Wallet connection buttons */}
+        {!wallet && (
+          <div className="flex flex-row gap-4 mb-4">
+            <Button onClick={handleConnectUnisat} disabled={loading}>
+              Connect Unisat {loading && <LoaderPinwheel className='animate-spin ml-2' />}
+            </Button>
+            <Button onClick={handleConnectXverse} disabled={loading}>
+              Connect Xverse {loading && <LoaderPinwheel className='animate-spin ml-2' />}
+            </Button>
+          </div>
         )}
         
         {/* Show wallet status */}
         <div className="mb-4">
           <p>Wallet Status: {wallet ? `Connected (${wallet.ordinalsAddress.substring(0, 10)}...)` : 'Not Connected'}</p>
-          <p>Network: {network}</p>
+          <p>Wallet Type: {wallet?.wallet || 'None'}</p>
         </div>
         
-        {/* Existing form */}
-        <form
-          className='flex flex-col'
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            form.handleSubmit();
-          }}
-        >
-          <form.Field
-            name='file'
-            children={(field) => {
-              const { name } = field;
-              return (
-                <div className='flex flex-row items-center justify-between gap-2'>
-                  <label className='uppercase' htmlFor={name}>{name}</label>
-                  <Input
-                    className='font-black ring-1'
-                    type='file'
-                    id={name}
-                    name={name}
-                    onChange={(e) => {
-                      //@ts-ignore
-                      form.setFieldValue(name, e?.target?.files?.[0]);
-                    }}
-                  />
-                </div>
-              );
+        {/* Only show form if wallet is connected */}
+        {wallet ? (
+          <form
+            className='flex flex-col'
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit();
             }}
-          />
+          >
+            <form.Field
+              name='file'
+              children={(field) => {
+                const { name } = field;
+                return (
+                  <div className='flex flex-row items-center justify-between gap-2'>
+                    <label className='uppercase' htmlFor={name}>{name}</label>
+                    <Input
+                      className='font-black ring-1'
+                      type='file'
+                      id={name}
+                      name={name}
+                      onChange={(e) => {
+                        //@ts-ignore
+                        form.setFieldValue(name, e?.target?.files?.[0]);
+                      }}
+                    />
+                  </div>
+                );
+              }}
+            />
 
-          <div className='flex flex-row justify-end mt-5'>
-            <Button type='submit' disabled={loading || feeRateLoading}>Inscribe { loading && <LoaderPinwheel className='animate-spin' /> }</Button>
-          </div>
-        </form>
+            <div className='flex flex-row justify-end mt-5'>
+              <Button type='submit' disabled={loading || feeRateLoading}>Inscribe { loading && <LoaderPinwheel className='animate-spin' /> }</Button>
+            </div>
+          </form>
+        ) : (
+          <p className="text-amber-500">Please connect a wallet to inscribe files</p>
+        )}
       </div>
 
       <div className='w-1/3'>

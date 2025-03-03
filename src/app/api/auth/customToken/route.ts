@@ -1,5 +1,4 @@
 import { Verifier } from 'bip322-js';
-import admin from '@/app/api/firebase';
 import { NextResponse } from 'next/server';
 
 const MESSAGE = 'Sign into NextJS Ordinals Application';
@@ -19,23 +18,14 @@ export async function POST(req: Request) {
     const signedResult = Verifier.verifySignature(address, MESSAGE, signature);
 
     if (signedResult) {
-      try {
-        const encodedAddress = encodeBitcoinAddressToBase64(address);
-        console.log('Creating custom token for address:', address, 'encoded as:', encodedAddress);
-        
-        const customToken = await admin.auth().createCustomToken(encodedAddress);
-
-
-        console.log('Custom token created:', customToken);
-
-        return NextResponse.json({ success: true, customToken, address });
-      } catch (tokenError) {
-        console.error('Error creating Firebase custom token:', tokenError);
-        return NextResponse.json(
-          { success: false, error: 'Failed to create authentication token', details: tokenError.message },
-          { status: 500 }
-        );
-      }
+      // Simply return success with the verified address
+      console.log('Signature verified for address:', address);
+      
+      return NextResponse.json({ 
+        success: true, 
+        address,
+        message: 'Wallet signature verified successfully'
+      });
     } else {
       return NextResponse.json(
         { success: false, error: 'Invalid signature' },
@@ -43,14 +33,10 @@ export async function POST(req: Request) {
       );
     }
   } catch (error) {
-    console.error('Error in custom token route:', error);
+    console.error('Error in signature verification route:', error);
     return NextResponse.json(
-      { success: false, error: 'Internal server error', details: error.message },
+      { success: false, error: 'Internal server error'},
       { status: 500 }
     );
   }
 }
-
-const encodeBitcoinAddressToBase64 = (address: string) => {
-  return Buffer.from(address).toString('base64');
-};

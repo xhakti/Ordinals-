@@ -8,13 +8,13 @@ import * as v from 'valibot';
 import { useContext, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { valibotValidator } from '@tanstack/valibot-form-adapter';
-// Remove Firebase storage imports since we won't be using them
+// Remove Firebase storage import
 import { EXPLORER_URL, MEMPOOL_URL, ONE_MINUTE, ONE_SECOND, USE_LOW_POSTAGE } from '@/lib/constants';
 import { DirectInscriptionOrder, InscriptionOrderState, type InscriptionFile } from 'ordinalsbot/dist/types/v1';
 import { useQuery } from '@tanstack/react-query';
 import Order from '@/components/Order';
 import Charge from '@/components/Charge';
-import { CloudCog, LoaderPinwheel } from 'lucide-react';
+import { LoaderPinwheel } from 'lucide-react';
 import { AuthContext } from '@/app/providers/AuthContext';
 
 const directInscribeSchema = v.object({
@@ -29,18 +29,73 @@ const directInscribeSchema = v.object({
 
 type TDirectInscribeForm = v.InferInput<typeof directInscribeSchema>;
 
-// Hardcoded wallet address
-const HARDCODED_WALLET_ADDRESS = "bc1qv9aczfftmvgk04qyk5njsd6mt5x535anwg70mq";
-// Your referral code to receive the additional fee
-const REFERRAL_CODE = "your-referral-code"; 
-// Additional fee in satoshis (0.00001 BTC = 1000 satoshis)
-const ADDITIONAL_FEE = 1000;
-
 export default function Inscribe() {
-
-  const { wallet } = useContext(AuthContext);
+  const { wallet, network, loginWithWallet } = useContext(AuthContext);
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<DirectInscriptionOrder | null>(null);
+
+  // Enhanced logging for wallet debugging
+  useEffect(() => {
+    console.log("Wallet context on component mount:", wallet);
+    console.log("Network on component mount:", network);
+    
+    // Check if wallet has the expected structure
+    if (wallet) {
+      console.log("Wallet ordinalsAddress:", wallet.ordinalsAddress);
+      console.log("Wallet paymentAddress:", wallet.paymentAddress);
+      console.log("Wallet type:", wallet.wallet);
+    } else {
+      console.log("No wallet connected yet");
+      
+      // Check if we're coming from a wallet connection
+      const urlParams = new URLSearchParams(window.location.search);
+      const walletParam = urlParams.get('wallet');
+      if (walletParam) {
+        console.log("Found wallet param in URL:", walletParam);
+        try {
+          // Try to recover wallet data if it exists in URL params
+          const walletData = JSON.parse(decodeURIComponent(walletParam));
+          console.log("Recovered wallet data:", walletData);
+          if (walletData && walletData.ordinalsAddress) {
+            console.log("Attempting to login with recovered wallet");
+            loginWithWallet(walletData);
+          }
+        } catch (e) {
+          console.error("Error parsing wallet data from URL:", e);
+        }
+      }
+    }
+    
+    // Check localStorage for wallet data
+    const storedWallet = localStorage.getItem('ordinals-wallet');
+    console.log("Stored wallet in localStorage:", storedWallet);
+    
+    if (!wallet && storedWallet) {
+      try {
+        const parsedWallet = JSON.parse(storedWallet);
+        console.log("Found wallet in localStorage, attempting to restore:", parsedWallet);
+        if (parsedWallet && parsedWallet.ordinalsAddress) {
+          loginWithWallet(parsedWallet);
+        }
+      } catch (e) {
+        console.error("Error parsing stored wallet:", e);
+      }
+    }
+  }, [wallet, network, loginWithWallet]);
+
+  // Add a debug button to manually set wallet (for testing)
+  const debugSetWallet = () => {
+    const testWallet = {
+      ordinalsAddress: "tb1pfakagp5n2x7tj4llcnhp9xtdrn97f6yhexqxngs2m8e3gqqgg3ns8k4kcz",
+      ordinalsPublicKey: "test_pubkey",
+      paymentAddress: "tb1qq3se78es2nz2f69nxm5muw6c6ph8ep776pp03z",
+      paymentPublicKey: "test_pubkey",
+      wallet: "UNISAT" as any,
+      network: "Signet"
+    };
+    console.log("Setting test wallet:", testWallet);
+    loginWithWallet(testWallet);
+  };
 
   const { data, error, isLoading } = useQuery({
     queryFn: async () => {
@@ -74,78 +129,117 @@ export default function Inscribe() {
     },
     onSubmit: async ({ value }: { value: TDirectInscribeForm}) => {
       setLoading(true);
-  
+      console.log("Form submission started");
+
       if (
         (loading || error) ||
         (feeRateLoading || feeRateError)
       ) return; // Don't submit if we're loading or have an error
-  
+
       try {
         v.parse(directInscribeSchema, value);
       } catch (err: any) {
         setLoading(false);
         return toast.error(err.message);
       }
-  
+
       if (!value.file) {
         setLoading(false);
         return toast.error('Please select a file');
       }
-  
+
+      // Enhanced wallet debugging
+      console.log("Current wallet state at submission:", wallet);
+      console.log("Wallet type:", wallet?.wallet);
+      console.log("Wallet network:", network);
+      
+      if (!wallet) {
+        console.log("Wallet is null or undefined");
+        setLoading(false);
+        return toast.error('Please connect a wallet');
+      }
+
+      if (!wallet.ordinalsAddress) {
+        console.log("Wallet connected but ordinalsAddress is missing");
+        console.log("Full wallet object:", JSON.stringify(wallet));
+        setLoading(false);
+        return toast.error('Wallet connected but ordinals address is missing');
+      }
+
       try {
         const { file } = value;
-        const { type, name, size } = file;
-    
-        // Convert file to base64 dataURL instead of uploading to Firebase
+        
+        // Read file as data URL instead of uploading to Firebase
         const reader = new FileReader();
-        reader.readAsDataURL(file as File);
         
         reader.onload = async () => {
-          const dataURL = reader.result as string;
-          
-          // Ensure fee is a valid number between 1 and 100000
-          const fee = feeRate?.data.fastestFee || 10;
-          const validFee = Math.min(Math.max(1, fee), 100000);
-          
-          // Send the dataURL directly to Ordinals API
-          const directInscribeResponse = await ordinalsbot.Inscription().createDirectOrder({
-            files: [{
-              dataURL,
-              name, 
-              size, 
-              type
-            }],
-            lowPostage: USE_LOW_POSTAGE,
-            fee: validFee,
-            receiveAddress: HARDCODED_WALLET_ADDRESS,
-            // Add referral code and additional fee
-            referral: REFERRAL_CODE,
-            additionalFee: ADDITIONAL_FEE
-          });
-    
-          setOrder(directInscribeResponse);
-          toast.success('Order created successfully');
-          setLoading(false);
+          try {
+            const dataURL = reader.result as string;
+            const { type, name, size } = file;
+            
+            console.log("File loaded as data URL, size:", dataURL.length);
+            console.log("Creating order with address:", wallet.ordinalsAddress);
+            console.log("Fee rate:", feeRate?.fastestFee || 1);
+            
+            const directInscribeResponse = await ordinalsbot.Inscription().createDirectOrder({
+              files: [{
+                dataURL, // Use dataURL directly instead of a storage URL
+                name, 
+                size, 
+                type
+              }],
+              lowPostage: USE_LOW_POSTAGE,
+              fee: feeRate?.fastestFee || 1,
+              receiveAddress: wallet.ordinalsAddress
+            });
+
+            setOrder(directInscribeResponse);
+            toast.success('Order created successfully');
+          } catch (error) {
+            console.error('Error creating inscription:', error);
+            toast.error('Failed to create inscription order');
+          } finally {
+            setLoading(false);
+          }
         };
         
         reader.onerror = () => {
+          console.error('Error reading file');
           toast.error('Failed to read file');
           setLoading(false);
         };
+        
+        // Start reading the file as a data URL
+        reader.readAsDataURL(file as File);
+        
       } catch (error) {
-        console.error('Error creating inscription:', error);
-        toast.error('Failed to create inscription order');
+        console.error('Error processing file:', error);
+        toast.error('Failed to process file');
         setLoading(false);
       }
     },
     validatorAdapter: valibotValidator()
-  
   });
   
   return (
     <div className='flex flex-row flex-wrap justify-center w-full pt-10 px-10 gap-5'>
       <div className='flex flex-col justify-between w-2/3 h-48 gap-5'>
         <h2 className='text-2xl'>Inscribe a File</h2>
+        
+        {/* Add debug button in development mode */}
+        {process.env.NODE_ENV === 'development' && !wallet && (
+          <Button onClick={debugSetWallet} className="mb-4">
+            Debug: Set Test Wallet
+          </Button>
+        )}
+        
+        {/* Show wallet status */}
+        <div className="mb-4">
+          <p>Wallet Status: {wallet ? `Connected (${wallet.ordinalsAddress.substring(0, 10)}...)` : 'Not Connected'}</p>
+          <p>Network: {network}</p>
+        </div>
+        
+        {/* Existing form */}
         <form
           className='flex flex-col'
           onSubmit={(e) => {

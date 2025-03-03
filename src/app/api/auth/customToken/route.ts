@@ -24,6 +24,10 @@ export async function POST(req: Request) {
         console.log('Creating custom token for address:', address, 'encoded as:', encodedAddress);
         
         const customToken = await admin.auth().createCustomToken(encodedAddress);
+
+
+        console.log('Custom token created:', customToken);
+
         return NextResponse.json({ success: true, customToken, address });
       } catch (tokenError) {
         console.error('Error creating Firebase custom token:', tokenError);
